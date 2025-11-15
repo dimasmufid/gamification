@@ -37,3 +37,6 @@ This Next.js 16 + TypeScript frontend powers the game dashboard experience. Foll
 ## Security & Configuration Tips
 - Never commit secrets; place runtime keys in `.env.local` and document required variables in the PR.
 - Reset local state via `rm -rf .next` when switching branches to avoid cache-related bugs.
+
+## Important Notes
+Use bun instead npm

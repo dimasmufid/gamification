@@ -1,13 +1,23 @@
+from collections.abc import AsyncGenerator
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
     CursorResult,
+    DateTime,
     Insert,
     MetaData,
     Select,
     Update,
+    func,
 )
-from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from src.config import settings
 from src.constants import DB_NAMING_CONVENTION
@@ -21,6 +31,29 @@ engine = create_async_engine(
     pool_pre_ping=settings.DATABASE_POOL_PRE_PING,
 )
 metadata = MetaData(naming_convention=DB_NAMING_CONVENTION)
+
+
+class Base(DeclarativeBase):
+    metadata = metadata
+
+
+class TimestampMixin:
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+async_session_factory = async_sessionmaker(
+    engine,
+    expire_on_commit=False,
+)
 
 
 async def fetch_one(
@@ -82,3 +115,19 @@ async def get_db_connection() -> AsyncConnection:
         yield connection
     finally:
         await connection.close()
+
+
+async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
+    async with async_session_factory() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+
+
+# Import models so Alembic can discover them via metadata
+try:  # pragma: no cover - executed for side effects
+    import src.auth.models  # noqa: F401
+    import src.game.models  # noqa: F401
+except ModuleNotFoundError:  # pragma: no cover - defensive
+    pass

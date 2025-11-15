@@ -53,3 +53,4 @@ _IMPORTANT: You are responsible for all the entire codebase. For every request y
 - for create snapshot for db migration, always init by command `just mm *migration_name*`. only after that, you can edit the snapshot file to add the changes. **DO NOT CREATE SNAPSHOT FILE MANUALLY**.
 - always use `shadcn ui` for ui components.
 - always use `zod` for form validation in frontend.
+- always use bun instead npm
