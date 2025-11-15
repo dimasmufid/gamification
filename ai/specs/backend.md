@@ -56,6 +56,7 @@ tasks/
 - Optional **Redis** for session locks and streak jobs (v1 can rely on DB transactions).
 - Authentication source: JWT signed by backend (FastAPI) or NextAuth session tokens when running inside Next.js. Regardless of mechanism, the services receive a `user_id`.
 - Time source: UTC everywhere, `timestamp with time zone`.
+- Multi-tenant context: every request that touches gameplay data must resolve a tenant membership (via `current_tenant`). Clients send an `X-Tenant-Id` header when the user switches workspaces; otherwise the API falls back to the user's default membership. Tables like heroes, tasks, sessions, inventory, world state, and drop logs now include `tenant_id UUID NOT NULL REFERENCES tenant(id)` and are always queried with both `user_id` and `tenant_id` filters.
 
 ### 2.4 Non-Functional Targets
 - P99 API latency < 400 ms (excluding session start timers).
@@ -107,20 +108,23 @@ Indexes: `users_email_idx`, `users_active_idx`.
 #### `heroes`
 ```sql
 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+tenant_id UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 level INT NOT NULL DEFAULT 1,
 exp INT NOT NULL DEFAULT 0,
 gold INT NOT NULL DEFAULT 0,
 equipped_hat_id UUID REFERENCES items(id),
 equipped_outfit_id UUID REFERENCES items(id),
 equipped_accessory_id UUID REFERENCES items(id),
-updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+UNIQUE (tenant_id, user_id)
 ```
 Business rules: equipped item must exist in user inventory or be null.
 
 #### `task_templates`
 ```sql
 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+tenant_id UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
 user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 name TEXT NOT NULL,
 category TEXT NOT NULL,
@@ -133,6 +137,7 @@ updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 #### `sessions`
 ```sql
 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+tenant_id UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
 user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 task_template_id UUID REFERENCES task_templates(id),
 duration_minutes INT NOT NULL CHECK (duration_minutes IN (25,50,90)),
@@ -162,16 +167,18 @@ created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 #### `inventory`
 ```sql
 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+tenant_id UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
 user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 item_id UUID NOT NULL REFERENCES items(id),
 obtained_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-UNIQUE (user_id, item_id)
+UNIQUE (tenant_id, user_id, item_id)
 ```
 
 #### `world_states`
 ```sql
 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+tenant_id UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 study_room_level INT NOT NULL DEFAULT 1,
 build_room_level INT NOT NULL DEFAULT 1,
 training_room_level INT NOT NULL DEFAULT 1,
@@ -179,12 +186,14 @@ plaza_level INT NOT NULL DEFAULT 1,
 total_sessions_success INT NOT NULL DEFAULT 0,
 day_streak INT NOT NULL DEFAULT 0,
 last_session_date DATE,
-last_reset_at TIMESTAMPTZ
+last_reset_at TIMESTAMPTZ,
+UNIQUE (tenant_id, user_id)
 ```
 
 #### `cosmetic_drop_logs` (optional)
 ```sql
 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+tenant_id UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
 session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
 item_id UUID NOT NULL REFERENCES items(id),
 rolled_at TIMESTAMPTZ NOT NULL DEFAULT now()

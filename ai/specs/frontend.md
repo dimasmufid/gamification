@@ -41,6 +41,12 @@ Phaser events (e.g., room enter) → React handlers → update UI, enable/disabl
 - **Client Components** host Phaser (`use client`) and interactive panels.
 - All shadcn/ui primitives render outside the Phaser canvas to prevent input conflicts.
 
+### 2.4 Multi-Tenant UX
+- The auth route group (`/sign-in`, `/sign-up`) renders shadcn forms that post to `/api/signin` and `/api/signup`. Successful responses hydrate `useAuthStore` and redirect back to `/`.
+- A global `useAuthStore` keeps the authenticated user, memberships, and the active organization; `api/client.ts` reads it to inject `X-Tenant-Id` into every request.
+- The top bar exposes an `OrganizationSwitcher` drop-down to call `/api/organizations/select` and invalidate React Query caches.
+- `/settings` hosts the tenant profile editor powered by `PATCH /api/tenants/:id` so workspace admins can rename or rebrand.
+
 ---
 
 ## 3. Tech Stack & Libraries
@@ -63,9 +69,12 @@ frontend/
 │  ├─ app/
 │  │  ├─ layout.tsx                 # Root layout, fonts, global providers
 │  │  ├─ page.tsx                   # Authenticated landing (world + panels)
+│  │  ├─ (auth)/sign-in/page.tsx    # Sign-in form
+│  │  ├─ (auth)/sign-up/page.tsx    # Sign-up form
+│  │  ├─ (auth)/layout.tsx          # Shared auth layout
 │  │  ├─ game/page.tsx              # Fullscreen focus mode (optional, shares components)
+│  │  ├─ settings/page.tsx          # Tenant settings surface
 │  │  ├─ api/                       # Next.js route handlers (SSR helpers, not core API)
-│  │  └─ (auth)/sign-in/page.tsx    # Provided by existing auth solution
 │  ├─ components/
 │  │  ├─ GameShell.tsx              # Layout glue between Phaser + panels
 │  │  ├─ TopBar.tsx
@@ -106,7 +115,8 @@ frontend/
 │  │  │   ├─ inventory.ts
 │  │  │   └─ world.ts
 │  │  ├─ store/
-│  │  │   └─ useGameStore.ts        # Zustand slice definitions
+│  │  │   ├─ useGameStore.ts        # Gameplay slices
+│  │  │   └─ useAuthStore.ts        # Tenant + user state
 │  │  └─ utils/
 │  │      ├─ timers.ts
 │  │      └─ analytics.ts
@@ -130,7 +140,8 @@ frontend/
    - Passes initial data into `GameShell` as serialized props.
 3. **`src/app/game/page.tsx`**
    - Mirrors main page but hides left/right panels for distraction-free sessions.
-4. **Auth routes** – re-use existing solution; ensure `page.tsx` is protected (redirect to sign-in).
+4. **`src/app/(auth)/*`** – client-rendered sign-in/sign-up forms that hit `/api/signin` + `/api/signup`, hydrate `useAuthStore`, and redirect to `/`.
+5. **`src/app/settings/page.tsx`** – tenant metadata form that posts to `PATCH /api/tenants/:id`.
 
 ---
 
@@ -183,6 +194,7 @@ Add similar files for `InventoryItem`, `WorldState`, and `RewardPayload` so Reac
   - automatic `credentials: 'include'`.
   - JSON parsing + error normalization.
   - Zod response schemas (e.g., `profileResponseSchema`).
+  - Injects `X-Tenant-Id` derived from `useAuthStore` so multi-tenant endpoints stay scoped.
 - **`endpoints.ts`** – exported helpers:
   - `getProfile() → { user, hero, worldState }`
   - `listTasks()`
@@ -191,6 +203,8 @@ Add similar files for `InventoryItem`, `WorldState`, and `RewardPayload` so Reac
   - `cancelSession(sessionId)` (client-only; informs backend)
   - `listInventory()`
   - `equipItem(itemId)`
+  - `signin(payload)` / `signup(payload)`
+  - `switchOrganization(id)` and `updateTenant(id, payload)`
 - All forms validated via zod before hitting endpoints.
 - React Query keys: `['profile']`, `['tasks']`, `['inventory']`, `['worldState']`, `['session', id]`.
 
@@ -212,10 +226,19 @@ Add similar files for `InventoryItem`, `WorldState`, and `RewardPayload` so Reac
   - `applyCosmeticEquip(itemId)`
 - Persist to memory only; rely on backend for truth. On refocus events, call `syncProfile`.
 
+`useAuthStore` slices:
+- `user`, `organization`, setter helpers.
+- Exposes `setAuth`, `updateOrganization`, `clearAuth` which also set the global tenant header via `api/client`.
+
 ### 8.2 React Query Integration
 - React Query hydrates SSR data into client cache.
 - Store values derived from React Query results to avoid double-fetch.
 - Use background refetch (every 3 min) for hero/world.
+
+### 8.3 Authentication & Tenant Flows
+- `SignInForm` / `SignUpForm` live under `components/auth` and post to `/api/signin` + `/api/signup`. On success they call `setAuth` and redirect to `/`.
+- `OrganizationSwitcher` reads memberships from `useAuthStore`, calls `switchOrganization`, and invalidates `['profile']`, `['tasks']`, and `['inventory']` query keys.
+- `TenantSettings` (app/settings) binds to `updateTenant` and, after saving, calls `updateOrganization` so the UI (top bar, switcher) reflects new metadata immediately.
 
 ---
 

@@ -29,6 +29,25 @@ class Config(CustomBaseSettings):
 
     APP_VERSION: str = "0.1"
 
+    # Auth settings
+    AUTH_ACCESS_TOKEN_TTL_MIN: int = 15
+    AUTH_REFRESH_TTL_DAYS: int = 7
+    AUTH_JWT_SECRET: str = "CHANGE_ME_IN_PRODUCTION"
+    AUTH_COOKIE_DOMAIN: str | None = None
+    AUTH_COOKIE_SECURE: bool | None = None
+    AUTH_COOKIE_SAMESITE: str = "lax"
+    AUTH_COOKIE_ACCESS_NAME: str = "access_token"
+    AUTH_COOKIE_REFRESH_NAME: str = "refresh_token"
+
+    # OAuth settings
+    OAUTH_GOOGLE_CLIENT_ID: str | None = None
+    OAUTH_GOOGLE_CLIENT_SECRET: str | None = None
+    OAUTH_GOOGLE_REDIRECT_URI: str | None = None
+
+    # URL settings
+    FRONTEND_URL: str | None = None
+    APP_URL: str | None = None
+
     @model_validator(mode="after")
     def validate_sentry_non_local(self) -> "Config":
         if self.ENVIRONMENT.is_deployed and not self.SENTRY_DSN:
