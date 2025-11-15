@@ -16,19 +16,20 @@ type ApiRequestOptions = Omit<RequestInit, "body"> & {
 
 export async function apiFetch<TResponse>(path: string, options: ApiRequestOptions = {}) {
   const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
+  const { body, headers, ...rest } = options;
 
   const init: RequestInit = {
-    ...options,
+    ...rest,
     headers: {
       "Content-Type": "application/json",
-      ...(options.headers ?? {}),
+      ...(headers ?? {}),
     },
     credentials: "include",
     cache: "no-store",
   };
 
-  if (options.body !== undefined) {
-    init.body = JSON.stringify(options.body);
+  if (body !== undefined) {
+    init.body = JSON.stringify(body);
   }
 
   const response = await fetch(url, init);

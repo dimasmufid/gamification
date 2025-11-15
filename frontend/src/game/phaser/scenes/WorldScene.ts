@@ -37,7 +37,8 @@ export class WorldScene extends Phaser.Scene {
     this.player.setDrag(650, 650);
     this.player.setDepth(5);
 
-    this.cursors = this.input.keyboard.createCursorKeys();
+    const keyboard = this.input?.keyboard;
+    this.cursors = keyboard?.createCursorKeys();
 
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
     this.events.on(Phaser.Scenes.Events.DESTROY, () => this.teardown());

@@ -19,7 +19,7 @@ const sessionSchema = z.object({
 
 type SessionFormValues = z.infer<typeof sessionSchema>;
 
-const durations = [
+const durations: { value: SessionFormValues["durationMinutes"]; label: string }[] = [
   { value: "25", label: "25 min - Sprint" },
   { value: "50", label: "50 min - Deep Focus" },
   { value: "90", label: "90 min - Immersion" },
@@ -67,7 +67,7 @@ export function SessionForm({ loading }: SessionFormProps) {
       return;
     }
     const duration = Number(values.durationMinutes);
-    const canStart = template.room === activeRoom || template.room === "plaza";
+    const canStart = template.room === activeRoom;
     if (!canStart) {
       toast("Move to the correct room",{
         description: `This task requires the ${template.room} room.`,
