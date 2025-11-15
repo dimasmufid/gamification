@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import Field, conint
 
+from src.auth.models import UserTenantRole
 from src.auth.schemas import UserPublic
 from src.game.enums import ItemRarity, ItemType, Room, SessionStatus, TaskCategory
 from src.schemas import CustomModel
@@ -36,10 +37,21 @@ class WorldStatePublic(CustomModel):
     last_session_date: date | None = None
 
 
+class ActiveOrganizationResponse(CustomModel):
+    id: UUID
+    name: str
+    slug: str
+    business_image: str | None = None
+    created_at: datetime
+    role: UserTenantRole
+    is_default: bool
+
+
 class ProfileResponse(CustomModel):
     user: UserPublic
     hero: HeroPublic
     world_state: WorldStatePublic
+    organization: ActiveOrganizationResponse
 
 
 class TaskTemplateCreate(CustomModel):
@@ -148,6 +160,7 @@ class EquipItemRequest(CustomModel):
 
 
 __all__ = [
+    "ActiveOrganizationResponse",
     "DroppedItem",
     "EquipItemRequest",
     "HeroEquipped",

@@ -58,6 +58,8 @@ eggs/
 .eggs/
 lib/
 !frontend/src/lib/
+!nextjs/src/lib/
+!tanstack/src/lib/
 lib64/
 parts/
 sdist/

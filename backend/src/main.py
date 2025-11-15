@@ -6,6 +6,8 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from src.auth.routers.auth import router as auth_router
+from src.auth.routers.invitations import router as invitations_router
+from src.auth.routers.tenants import router as tenants_router
 from src.config import app_configs, settings
 from src.game.router import router as game_router
 
@@ -41,4 +43,6 @@ async def healthcheck() -> dict[str, str]:
 
 
 app.include_router(auth_router, prefix="/api")
+app.include_router(tenants_router, prefix="/api/tenants")
+app.include_router(invitations_router, prefix="/api/invitations")
 app.include_router(game_router, prefix="/api")

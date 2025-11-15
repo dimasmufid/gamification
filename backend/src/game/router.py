@@ -7,11 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth.dependencies import CurrentUser
+from src.auth.dependencies import CurrentUser, TenantContext, current_tenant
 from src.database import get_async_session
 from src.game.enums import ItemType, Room, SessionStatus
 from src.game.models import Inventory, Item, Session, TaskTemplate
 from src.game.schemas import (
+    ActiveOrganizationResponse,
     EquipItemRequest,
     HeroEquipped,
     HeroPublic,
@@ -82,22 +83,41 @@ def decode_cursor(cursor: str) -> datetime:
         ) from exc
 
 
+def serialize_active_organization(context: TenantContext) -> ActiveOrganizationResponse:
+    return ActiveOrganizationResponse(
+        id=context.tenant.id,
+        name=context.tenant.name,
+        slug=context.tenant.slug,
+        business_image=context.tenant.business_image,
+        created_at=context.tenant.created_at,
+        role=context.membership.role,
+        is_default=context.membership.is_default,
+    )
+
+
 @router.get("/profile", response_model=ProfileResponse)
 async def get_profile(
     user: CurrentUser,
+    context: TenantContext = Depends(current_tenant),
     session: AsyncSession = Depends(get_async_session),
 ) -> ProfileResponse:
-    hero, world_state = await initialize_progression(session, user_id=user.id)
+    hero, world_state = await initialize_progression(
+        session,
+        user_id=user.id,
+        tenant_id=context.tenant.id,
+    )
     return ProfileResponse(
         user=user,
         hero=hero_to_public(hero),
         world_state=world_state_to_public(world_state),
+        organization=serialize_active_organization(context),
     )
 
 
 @router.get("/tasks", response_model=PaginatedTasks)
 async def list_tasks(
     user: CurrentUser,
+    context: TenantContext = Depends(current_tenant),
     session: AsyncSession = Depends(get_async_session),
     room: Room | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=50),
@@ -105,7 +125,10 @@ async def list_tasks(
 ) -> PaginatedTasks:
     statement = (
         select(TaskTemplate)
-        .where(TaskTemplate.user_id == user.id)
+        .where(
+            TaskTemplate.user_id == user.id,
+            TaskTemplate.tenant_id == context.tenant.id,
+        )
         .order_by(TaskTemplate.created_at.desc())
     )
     if room:
@@ -134,10 +157,12 @@ async def list_tasks(
 async def create_task_template(
     payload: TaskTemplateCreate,
     user: CurrentUser,
+    context: TenantContext = Depends(current_tenant),
     session: AsyncSession = Depends(get_async_session),
 ) -> TaskTemplatePublic:
     ensure_allowed_duration(payload.default_duration_minutes)
     template = TaskTemplate(
+        tenant_id=context.tenant.id,
         user_id=user.id,
         name=payload.name.strip(),
         category=payload.category,
@@ -155,9 +180,15 @@ async def update_task_template(
     task_id: UUID,
     payload: TaskTemplateUpdate,
     user: CurrentUser,
+    context: TenantContext = Depends(current_tenant),
     session: AsyncSession = Depends(get_async_session),
 ) -> TaskTemplatePublic:
-    template = await get_task_template(session, template_id=task_id, user_id=user.id)
+    template = await get_task_template(
+        session,
+        template_id=task_id,
+        user_id=user.id,
+        tenant_id=context.tenant.id,
+    )
     if not template:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Task not found."
@@ -186,9 +217,15 @@ async def update_task_template(
 async def delete_task_template(
     task_id: UUID,
     user: CurrentUser,
+    context: TenantContext = Depends(current_tenant),
     session: AsyncSession = Depends(get_async_session),
 ) -> None:
-    template = await get_task_template(session, template_id=task_id, user_id=user.id)
+    template = await get_task_template(
+        session,
+        template_id=task_id,
+        user_id=user.id,
+        tenant_id=context.tenant.id,
+    )
     if not template:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Task not found."
@@ -206,6 +243,7 @@ async def delete_task_template(
 async def start_session(
     payload: SessionStartRequest,
     user: CurrentUser,
+    context: TenantContext = Depends(current_tenant),
     session: AsyncSession = Depends(get_async_session),
 ) -> SessionStartResponse:
     ensure_allowed_duration(payload.duration_minutes)
@@ -213,6 +251,7 @@ async def start_session(
         session,
         template_id=payload.task_template_id,
         user_id=user.id,
+        tenant_id=context.tenant.id,
     )
     if not template:
         raise HTTPException(
@@ -222,7 +261,10 @@ async def start_session(
 
     pending_count_stmt = (
         select(func.count(Session.id))
-        .where(Session.user_id == user.id)
+        .where(
+            Session.user_id == user.id,
+            Session.tenant_id == context.tenant.id,
+        )
         .where(Session.status.in_([SessionStatus.PENDING, SessionStatus.ACTIVE]))
     )
     pending_count = await session.scalar(pending_count_stmt)
@@ -233,6 +275,7 @@ async def start_session(
         )
 
     session_obj = Session(
+        tenant_id=context.tenant.id,
         user_id=user.id,
         task_template_id=template.id,
         duration_minutes=payload.duration_minutes,
@@ -267,10 +310,15 @@ async def get_session_for_user(
     *,
     session_id: UUID,
     user_id: UUID,
+    tenant_id: UUID,
 ) -> Session | None:
     statement = (
         select(Session)
-        .where(Session.id == session_id, Session.user_id == user_id)
+        .where(
+            Session.id == session_id,
+            Session.user_id == user_id,
+            Session.tenant_id == tenant_id,
+        )
         .with_for_update()
     )
     result = await session.execute(statement)
@@ -281,12 +329,14 @@ async def get_session_for_user(
 async def complete_session(
     payload: SessionIdentifier,
     user: CurrentUser,
+    context: TenantContext = Depends(current_tenant),
     session: AsyncSession = Depends(get_async_session),
 ) -> SessionCompleteResponse:
     session_obj = await get_session_for_user(
         session,
         session_id=payload.session_id,
         user_id=user.id,
+        tenant_id=context.tenant.id,
     )
     if not session_obj:
         raise HTTPException(
@@ -299,7 +349,11 @@ async def complete_session(
         )
     validate_completion_window(session_obj)
 
-    hero, world_state = await initialize_progression(session, user_id=user.id)
+    hero, world_state = await initialize_progression(
+        session,
+        user_id=user.id,
+        tenant_id=context.tenant.id,
+    )
     exp_reward, gold_reward = compute_rewards(session_obj.duration_minutes)
     apply_rewards(hero, exp_reward, gold_reward)
     session_obj.reward_exp = exp_reward
@@ -311,6 +365,7 @@ async def complete_session(
     dropped_item = await maybe_roll_cosmetic_drop(
         session,
         user_id=user.id,
+        tenant_id=context.tenant.id,
         hero=hero,
         session_obj=session_obj,
     )
@@ -331,12 +386,14 @@ async def complete_session(
 async def cancel_session(
     payload: SessionIdentifier,
     user: CurrentUser,
+    context: TenantContext = Depends(current_tenant),
     session: AsyncSession = Depends(get_async_session),
 ) -> SessionHistoryEntry:
     session_obj = await get_session_for_user(
         session,
         session_id=payload.session_id,
         user_id=user.id,
+        tenant_id=context.tenant.id,
     )
     if not session_obj:
         raise HTTPException(
@@ -366,13 +423,17 @@ async def cancel_session(
 @router.get("/sessions/history", response_model=SessionHistoryResponse)
 async def get_session_history(
     user: CurrentUser,
+    context: TenantContext = Depends(current_tenant),
     session: AsyncSession = Depends(get_async_session),
     limit: int = Query(default=20, ge=1, le=50),
     cursor: str | None = Query(default=None),
 ) -> SessionHistoryResponse:
     statement = (
         select(Session)
-        .where(Session.user_id == user.id)
+        .where(
+            Session.user_id == user.id,
+            Session.tenant_id == context.tenant.id,
+        )
         .order_by(Session.started_at.desc())
     )
     if cursor:
@@ -408,10 +469,19 @@ async def get_session_history(
 @router.get("/inventory", response_model=InventoryResponse)
 async def get_inventory(
     user: CurrentUser,
+    context: TenantContext = Depends(current_tenant),
     session: AsyncSession = Depends(get_async_session),
 ) -> InventoryResponse:
-    hero, _ = await initialize_progression(session, user_id=user.id)
-    rows = await get_inventory_items(session, user_id=user.id)
+    hero, _ = await initialize_progression(
+        session,
+        user_id=user.id,
+        tenant_id=context.tenant.id,
+    )
+    rows = await get_inventory_items(
+        session,
+        user_id=user.id,
+        tenant_id=context.tenant.id,
+    )
     items = [
         InventoryItemPublic(
             id=item.id,
@@ -445,13 +515,22 @@ def map_item_to_slot(item_type: ItemType) -> str:
 async def equip_item(
     payload: EquipItemRequest,
     user: CurrentUser,
+    context: TenantContext = Depends(current_tenant),
     session: AsyncSession = Depends(get_async_session),
 ) -> HeroPublic:
-    hero, _ = await initialize_progression(session, user_id=user.id)
+    hero, _ = await initialize_progression(
+        session,
+        user_id=user.id,
+        tenant_id=context.tenant.id,
+    )
     statement = (
         select(Item)
         .join(Inventory, Inventory.item_id == Item.id)
-        .where(Inventory.user_id == user.id, Item.id == payload.item_id)
+        .where(
+            Inventory.user_id == user.id,
+            Inventory.tenant_id == context.tenant.id,
+            Item.id == payload.item_id,
+        )
     )
     result = await session.execute(statement)
     item = result.scalars().first()
@@ -470,9 +549,14 @@ async def equip_item(
 @router.get("/worldstate", response_model=WorldStateResponse)
 async def get_world_state_endpoint(
     user: CurrentUser,
+    context: TenantContext = Depends(current_tenant),
     session: AsyncSession = Depends(get_async_session),
 ) -> WorldStateResponse:
-    _, world_state = await initialize_progression(session, user_id=user.id)
+    _, world_state = await initialize_progression(
+        session,
+        user_id=user.id,
+        tenant_id=context.tenant.id,
+    )
     return WorldStateResponse(
         world_state=world_state_to_public(world_state),
         milestones=milestone_summary(world_state),

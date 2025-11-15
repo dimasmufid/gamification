@@ -86,17 +86,22 @@ async def initialize_progression(
     session: AsyncSession,
     *,
     user_id: UUID,
+    tenant_id: UUID,
 ) -> tuple[Hero, WorldState]:
-    hero = await get_hero(session, user_id=user_id)
+    hero = await get_hero(session, user_id=user_id, tenant_id=tenant_id)
     if not hero:
-        hero = Hero(user_id=user_id)
+        hero = Hero(user_id=user_id, tenant_id=tenant_id)
         session.add(hero)
         await session.commit()
         await session.refresh(hero)
 
-    world_state = await get_world_state(session, user_id=user_id)
+    world_state = await get_world_state(
+        session,
+        user_id=user_id,
+        tenant_id=tenant_id,
+    )
     if not world_state:
-        world_state = WorldState(user_id=user_id)
+        world_state = WorldState(user_id=user_id, tenant_id=tenant_id)
         session.add(world_state)
         await session.commit()
         await session.refresh(world_state)
@@ -104,8 +109,16 @@ async def initialize_progression(
     return hero, world_state
 
 
-async def get_hero(session: AsyncSession, *, user_id: UUID) -> Hero | None:
-    statement: Select[tuple[Hero]] = select(Hero).where(Hero.user_id == user_id)
+async def get_hero(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    tenant_id: UUID,
+) -> Hero | None:
+    statement: Select[tuple[Hero]] = select(Hero).where(
+        Hero.user_id == user_id,
+        Hero.tenant_id == tenant_id,
+    )
     result = await session.execute(statement)
     return result.scalars().first()
 
@@ -114,9 +127,11 @@ async def get_world_state(
     session: AsyncSession,
     *,
     user_id: UUID,
+    tenant_id: UUID,
 ) -> WorldState | None:
     statement: Select[tuple[WorldState]] = select(WorldState).where(
-        WorldState.user_id == user_id
+        WorldState.user_id == user_id,
+        WorldState.tenant_id == tenant_id,
     )
     result = await session.execute(statement)
     return result.scalars().first()
@@ -127,10 +142,12 @@ async def get_task_template(
     *,
     template_id: UUID,
     user_id: UUID,
+    tenant_id: UUID,
 ) -> TaskTemplate | None:
     statement = select(TaskTemplate).where(
         TaskTemplate.id == template_id,
         TaskTemplate.user_id == user_id,
+        TaskTemplate.tenant_id == tenant_id,
     )
     result = await session.execute(statement)
     return result.scalars().first()
@@ -173,6 +190,7 @@ async def maybe_roll_cosmetic_drop(
     session: AsyncSession,
     *,
     user_id: UUID,
+    tenant_id: UUID,
     hero: Hero,
     session_obj: Session,
 ) -> DroppedItem | None:
@@ -186,6 +204,7 @@ async def maybe_roll_cosmetic_drop(
             and_(
                 Inventory.item_id == Item.id,
                 Inventory.user_id == user_id,
+                Inventory.tenant_id == tenant_id,
             ),
         )
         .where(Inventory.id.is_(None))
@@ -205,10 +224,15 @@ async def maybe_roll_cosmetic_drop(
         candidates = available_items
     item = random.choice(candidates)
 
-    inventory_entry = Inventory(user_id=user_id, item_id=item.id)
+    inventory_entry = Inventory(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        item_id=item.id,
+    )
     session.add(inventory_entry)
     session.add(
         CosmeticDropLog(
+            tenant_id=tenant_id,
             session_id=session_obj.id,
             item_id=item.id,
         )
@@ -250,11 +274,15 @@ async def get_inventory_items(
     session: AsyncSession,
     *,
     user_id: UUID,
+    tenant_id: UUID,
 ) -> list[tuple[Inventory, Item]]:
     statement = (
         select(Inventory, Item)
         .join(Item, Item.id == Inventory.item_id)
-        .where(Inventory.user_id == user_id)
+        .where(
+            Inventory.user_id == user_id,
+            Inventory.tenant_id == tenant_id,
+        )
         .order_by(Inventory.obtained_at.desc())
     )
     result = await session.execute(statement)

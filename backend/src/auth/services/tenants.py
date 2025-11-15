@@ -8,8 +8,13 @@ from sqlalchemy.orm import joinedload
 
 from src.auth.models import Tenant, User, UserTenant, UserTenantRole
 from src.auth.schemas import TenantCreate, TenantRead, TenantUpdate
-from src.expenses.constants import DEFAULT_EXPENSE_TYPE_NAMES
-from src.expenses.models import expense_types
+
+try:  # pragma: no cover - optional dependency
+    from src.expenses.constants import DEFAULT_EXPENSE_TYPE_NAMES
+    from src.expenses.models import expense_types
+except ModuleNotFoundError:  # pragma: no cover - fallback when module absent
+    DEFAULT_EXPENSE_TYPE_NAMES: list[str] = []
+    expense_types = None
 
 
 class TenantService:
@@ -108,7 +113,7 @@ class TenantService:
         return result.scalars().first() is not None
 
     async def _seed_default_expense_types(self, tenant_id: UUID) -> None:
-        if not DEFAULT_EXPENSE_TYPE_NAMES:
+        if not DEFAULT_EXPENSE_TYPE_NAMES or expense_types is None:
             return
         payloads = [
             {"tenant_id": tenant_id, "name": name}

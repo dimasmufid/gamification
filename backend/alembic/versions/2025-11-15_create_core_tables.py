@@ -28,6 +28,7 @@ user_tenant_role_enum = postgresql.ENUM(
     "ADMIN",
     "MEMBER",
     name="user_tenant_role",
+    create_type=False,
 )
 invitation_status_enum = postgresql.ENUM(
     "PENDING",
@@ -35,6 +36,7 @@ invitation_status_enum = postgresql.ENUM(
     "EXPIRED",
     "REVOKED",
     name="invitation_status",
+    create_type=False,
 )
 
 task_category_enum = postgresql.ENUM(
@@ -43,18 +45,21 @@ task_category_enum = postgresql.ENUM(
     "training",
     "custom",
     name="task_category",
+    create_type=False,
 )
 task_room_enum = postgresql.ENUM(
     "study_room",
     "build_room",
     "training_room",
     name="task_room",
+    create_type=False,
 )
 session_room_enum = postgresql.ENUM(
     "study_room",
     "build_room",
     "training_room",
     name="session_room",
+    create_type=False,
 )
 session_status_enum = postgresql.ENUM(
     "pending",
@@ -63,14 +68,28 @@ session_status_enum = postgresql.ENUM(
     "cancel",
     "timeout",
     name="session_status",
+    create_type=False,
 )
-item_type_enum = postgresql.ENUM("hat", "outfit", "accessory", name="item_type")
-item_rarity_enum = postgresql.ENUM("common", "rare", "epic", name="item_rarity")
+item_type_enum = postgresql.ENUM(
+    "hat",
+    "outfit",
+    "accessory",
+    name="item_type",
+    create_type=False,
+)
+item_rarity_enum = postgresql.ENUM(
+    "common",
+    "rare",
+    "epic",
+    name="item_rarity",
+    create_type=False,
+)
 item_room_affinity_enum = postgresql.ENUM(
     "study_room",
     "build_room",
     "training_room",
     name="item_room_affinity",
+    create_type=False,
 )
 
 

@@ -26,16 +26,24 @@ from src.game.enums import ItemRarity, ItemType, Room, SessionStatus, TaskCatego
 
 class Hero(TimestampMixin, Base):
     __tablename__ = "heroes"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "user_id", name="uq_hero_tenant_user"),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("tenant.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("user.id", ondelete="CASCADE"),
-        unique=True,
         nullable=False,
         index=True,
     )
@@ -63,6 +71,12 @@ class TaskTemplate(TimestampMixin, Base):
         PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("tenant.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -98,6 +112,12 @@ class Session(TimestampMixin, Base):
         PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("tenant.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -173,6 +193,12 @@ class Inventory(Base):
         primary_key=True,
         default=uuid4,
     )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("tenant.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("user.id", ondelete="CASCADE"),
@@ -191,22 +217,41 @@ class Inventory(Base):
         nullable=False,
     )
 
-    __table_args__ = (UniqueConstraint("user_id", "item_id", name="uq_inventory_item"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "user_id",
+            "item_id",
+            name="uq_inventory_item",
+        ),
+    )
 
 
 class WorldState(TimestampMixin, Base):
     __tablename__ = "world_states"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "user_id",
+            name="uq_world_state_tenant_user",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("tenant.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("user.id", ondelete="CASCADE"),
         nullable=False,
-        unique=True,
     )
     study_room_level: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     build_room_level: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
@@ -227,6 +272,12 @@ class CosmeticDropLog(Base):
         PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("tenant.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     session_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
