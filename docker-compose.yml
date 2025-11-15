@@ -1,0 +1,26 @@
+services:
+  app:
+    image: game-api
+    env_file:
+      - .env
+    ports:
+      - "${API_HOST_PORT:-8020}:8000"
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command:
+      - /src/entrypoints/gunicorn.sh
+
+  frontend:
+    image: game-frontend
+    env_file:
+      - .env
+    ports:
+      - "${FRONTEND_HOST_PORT:-3020}:3000"
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8010}
+    depends_on:
+      - app
